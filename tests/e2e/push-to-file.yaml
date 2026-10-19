@@ -1,0 +1,39 @@
+# Secrets Provider as a native sidecar writing secrets to a file. The app
+# copies the file at startup to prove secrets existed before it started.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-app
+  template:
+    metadata:
+      labels:
+        app: demo-app
+      annotations:
+        conjur.org/inject: "true"
+        conjur.org/inject-type: secrets-provider
+        conjur.org/conjur-inject-volumes: app
+        conjur.org/container-mode: sidecar
+        conjur.org/secrets-destination: file
+        conjur.org/authn-identity: host/data/{{DATA_BRANCH}}/system:serviceaccount:{{APP_NS}}:demo-app
+        conjur.org/conjur-secrets.db: |
+          - url: data/{{DATA_BRANCH}}/db/url
+          - username: data/{{DATA_BRANCH}}/db/username
+          - password: data/{{DATA_BRANCH}}/db/password
+        conjur.org/secret-file-path.db: db.yaml
+        conjur.org/secret-file-format.db: yaml
+        conjur.org/secrets-refresh-enabled: "true"
+        conjur.org/secrets-refresh-interval: 30s
+    spec:
+      serviceAccountName: demo-app
+      containers:
+        - name: app
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - cp /conjur/secrets/db.yaml /tmp/at-start.yaml 2>/dev/null || echo MISSING > /tmp/at-start.yaml; exec sleep 86400

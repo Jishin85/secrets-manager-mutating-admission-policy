@@ -41,7 +41,14 @@ data:
   conjurApplianceUrl: "https://secrets-manager-follower.secrets-manager.svc.cluster.local"
   authnK8sAuthenticatorID: "my-authenticator-id"
   # Optional. Defaults to "<conjurApplianceUrl>/authn-k8s/<authnK8sAuthenticatorID>".
-  # CONJUR_AUTHN_URL: "https://.../authn-jwt/my-service-id"
+  # Point it at an authn-jwt authenticator to switch Secrets Provider and the
+  # authenticator client to JWT authentication (required for Secrets Manager
+  # SaaS, which cannot reach the cluster for authn-k8s):
+  # CONJUR_AUTHN_URL: "https://<tenant>.secretsmgr.cyberark.cloud/api/authn-jwt/<service-id>"
+  # With authn-jwt, a projected service account token is injected. Its
+  # audience must match the authenticator's `audience` variable.
+  # jwtAudience: "conjur"
+  # jwtTokenExpirationSeconds: "600"
   conjurSslCertificate: |
     -----BEGIN CERTIFICATE-----
     REPLACE-WITH-SECRETS-MANAGER-CA-CERTIFICATE

@@ -11,10 +11,10 @@ The pod annotation contract (`conjur.org/*`) and the namespace opt-in label
 (`cyberark-sidecar-injector=enabled`) are the same as the webhook's. Existing
 workloads therefore migrate without manifest changes.
 
-> **Status: draft, not yet validated.** These manifests were written from
-> the webhook source and the Kubernetes API reference, and have not yet been
-> applied to a cluster. Complete the [validation checklist](#validation-checklist)
-> before you adopt them.
+> **Status: tested on Kubernetes 1.36 against Secrets Manager SaaS.**
+> Secrets Provider (push-to-file and `k8s_secrets`) and the authenticator
+> client were verified end to end with authn-jwt. Secretless and the authn-k8s
+> path are covered by mutation tests only. See [Testing](#testing).
 
 ## Contents
 
@@ -26,21 +26,18 @@ policies/secretless.yaml         MutatingAdmissionPolicy + Binding: inject-type 
 policies/validation.yaml         ValidatingAdmissionPolicy + Binding: rejects invalid/uninjected pods
 examples/                        Annotated sample workloads
 docs/sidecar-injector-analysis.md  Study of the webhook and the problems this design fixes
+tests/                           Secrets Manager setup, mutation tests and end-to-end tests
 kustomization.yaml
 ```
 
 ## Requirements
 
-- **Kubernetes 1.34 or later.** The policies use
-  `admissionregistration.k8s.io/v1beta1`. On 1.34/1.35 the beta API is off by
-  default. Enable it on kube-apiserver with:
+- **Kubernetes 1.36 or later.** The policies use
+  `admissionregistration.k8s.io/v1`, where `MutatingAdmissionPolicy` is GA.
+  On 1.34/1.35, change the policy and binding `apiVersion` to `v1beta1` (the
+  spec fields are the same) and enable the beta API on kube-apiserver with:
   - `--feature-gates=MutatingAdmissionPolicy=true`
   - `--runtime-config=admissionregistration.k8s.io/v1beta1=true`
-
-  If your cluster serves `MutatingAdmissionPolicy` at
-  `admissionregistration.k8s.io/v1`, change the `apiVersion` of the policies
-  and bindings to `v1`. The spec fields are the same. On managed Kubernetes,
-  check whether the provider lets you enable the API.
 - **Native sidecar containers** (`initContainers[].restartPolicy: Always`),
   which are GA since 1.33. Every cluster that supports the policies has them.
 
@@ -59,6 +56,31 @@ kustomization.yaml
    kubectl label namespace <app-namespace> cyberark-sidecar-injector=enabled
    ```
 4. Annotate pod templates (see [examples/](examples/)).
+
+## Authentication: authn-k8s or authn-jwt
+
+The authentication method follows the parameter ConfigMap's `CONJUR_AUTHN_URL`:
+
+- **Not set:** authn-k8s, at
+  `<conjurApplianceUrl>/authn-k8s/<authnK8sAuthenticatorID>`. This needs a
+  Secrets Manager instance (for example a Follower) that can reach the
+  cluster's API server.
+- **Points at `/authn-jwt/<service-id>`:** Secrets Provider and the
+  authenticator client get JWT wiring:
+  - a projected service account token volume `jwt-token` (audience
+    `jwtAudience`, default `conjur`; lifetime `jwtTokenExpirationSeconds`,
+    default 600)
+  - that token mounted at `/var/run/secrets/tokens`
+  - `JWT_TOKEN_PATH` set to it
+
+  This is the only option for **Secrets Manager SaaS**, which cannot reach a
+  private cluster. If the cluster's JWKS endpoint isn't public, configure the
+  authenticator with static `public-keys` (see
+  [tests/setup-conjur.sh](tests/setup-conjur.sh)).
+
+Two cases keep authn-k8s style configuration: authenticator pods that
+reference `conjur.org/conjurConnConfig`, and Secretless. Both take their
+connection settings from namespace ConfigMaps or literals.
 
 ## Annotation reference
 
@@ -114,10 +136,16 @@ These are deliberate changes, and they are what make this the new standard:
   `allowPrivilegeEscalation: false`, drop all capabilities and use the
   `RuntimeDefault` seccomp profile. The default `imagePullPolicy` is
   `IfNotPresent` (configurable).
-- **Fail-closed validation.** If a pod requests injection but is not mutated,
-  `ValidatingAdmissionPolicy` rejects it with a reason. Causes include invalid
-  annotations, a missing binding, a missing parameter ConfigMap, or the API
-  being disabled. Previously such pods could start without secrets.
+- **Fail-closed validation that doesn't block other pods.** If a pod requests
+  injection but is not mutated, `ValidatingAdmissionPolicy` rejects it with a
+  reason. Causes include invalid annotations, a missing binding, a missing
+  parameter ConfigMap, or the API being disabled. Previously such pods could
+  start without secrets.
+
+  The bindings use `parameterNotFoundAction: Allow`. Kubernetes resolves
+  parameters before `matchConditions`, so `Deny` would block every pod in a
+  labelled namespace whenever the parameter ConfigMap was missing.
+- **authn-jwt support** (see above).
 - **Legacy (non-native) sidecar placement in `containers` is not offered.**
 
 ## Migrating from the webhook
@@ -134,30 +162,39 @@ and the webhook skips pods in that state.
    its CSR (`kubectl delete csr cyberark-sidecar-injector.injectors`) and its
    namespace.
 
-## Validation checklist
+## Testing
 
-Before production, verify the following on a non-production cluster:
+[tests/](tests/) contains a complete, re-runnable test setup. All names come
+from `tests/env` (copy it from [tests/env.example](tests/env.example)), which
+is gitignored.
 
-- [ ] `kubectl apply --dry-run=server -k .` accepts all objects. This
-      type-checks every CEL expression against the Pod schema.
-- [ ] The CEL features used compile on your Kubernetes version:
-      optional types (`[?key]`, `.orValue()`, `?field:`),
-      `jsonpatch.escapeKey`, typed `Object.spec...{}` construction, and
-      `list.indexOf`.
-- [ ] Each example in [examples/](examples/) is mutated as documented
-      (`kubectl get pod -o yaml`), for both `init` and `sidecar` modes.
-- [ ] The Secrets Provider image contains `/usr/local/bin/conjur-secrets-provided.sh`,
-      and the app containers start only after secrets are written.
-- [ ] The injected `securityContext` works with each pinned image.
-- [ ] Invalid annotations (for example `conjur.org/inject-type: foo`) are
-      rejected with the validation message.
-- [ ] Deleting the parameter ConfigMap causes annotated pods to be denied
-      rather than started without a sidecar.
+| Script | What it does |
+|---|---|
+| [tests/setup-conjur.sh](tests/setup-conjur.sh) | Creates a dedicated authn-jwt authenticator (static JWKS from the cluster), one host per test service account (bound by the `sub` claim), and test variables. Uses additive `conjur policy load` only, so it's safe on a shared tenant. |
+| [tests/setup-cluster.sh](tests/setup-cluster.sh) | Installs the policies, generates the parameter ConfigMap (tenant TLS chain, authn-jwt URL, pinned image digests), and creates the labelled test namespace plus an unlabelled one. |
+| [tests/run-tests.sh](tests/run-tests.sh) `[static\|e2e\|all]` | `static`: server-side dry-run of every case in [tests/cases/](tests/cases/), asserting on the mutated Pod. `e2e`: deploys [tests/e2e/](tests/e2e/) workloads that fetch real secrets. |
+| [tests/teardown.sh](tests/teardown.sh) | Removes the test namespaces, policies and the Secrets Manager test resources. |
+
+Last run: Kubernetes 1.36.5 (OrbStack), Secrets Manager SaaS, Secrets
+Provider v1.11.1, authn-k8s-client v0.27.0. 62/62 mutation checks and 9/9
+end-to-end checks passed:
+- push-to-file native sidecar: secrets were present before the app started,
+  and a rotated secret was refreshed within about 30s
+- `k8s_secrets` init container: the Kubernetes Secret was populated, which
+  depends on the injected service account token mount
+- authenticator native sidecar: the access token was shared with the app
+
+**Not yet covered:**
+- Secretless end to end (mutation only)
+- authn-k8s end to end
+- coexistence with the webhook
+- Job completion with native sidecars
 
 ## Roadmap
 
-- authn-jwt support for Secrets Provider (projected service account token
-  volume plus `JWT_TOKEN_PATH`)
+These are suggested next steps, not commitments; no owners are assigned yet.
+
+- authn-jwt for Secretless
 - Resource requests/limits and `runAsNonRoot` driven by the parameter ConfigMap
 - Helm chart packaging
-- Automated tests (server-side dry-run against an API server in CI)
+- Run `tests/run-tests.sh static` in CI against an ephemeral cluster

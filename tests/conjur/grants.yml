@@ -1,0 +1,8 @@
+# Loaded at branch: conjur/authn-jwt/{{AUTHN_ID}}
+# Allows the test workloads to authenticate with the dedicated authenticator.
+- !grant
+  role: !group apps
+  members:
+    - !host /data/{{DATA_BRANCH}}/system:serviceaccount:{{APP_NS}}:demo-app
+    - !host /data/{{DATA_BRANCH}}/system:serviceaccount:{{APP_NS}}:k8s-secrets-app
+    - !host /data/{{DATA_BRANCH}}/system:serviceaccount:{{APP_NS}}:token-consumer

@@ -12,6 +12,10 @@
 #   * Volume conjur-access-token (memory), unless one already exists
 #   * Read-only /run/conjur mount on every container listed in
 #     `conjur.org/conjur-inject-volumes`
+#   * authn-jwt (when the cluster parameter CONJUR_AUTHN_URL points at
+#     /authn-jwt/ and the pod does not use conjurConnConfig): a projected
+#     service account token volume `jwt-token` mounted at
+#     /var/run/secrets/tokens, and JWT_TOKEN_PATH set accordingly
 #   * Annotations: conjur.org/status=injected, injector-only annotations removed
 #
 # Connection settings, per variable:
@@ -23,7 +27,7 @@
 #   * `conjur.org/conjurAuthConfig` set -> CONJUR_AUTHN_LOGIN from that ConfigMap
 #   * otherwise                          -> CONJUR_AUTHN_LOGIN from
 #     `conjur.org/authn-identity` (same annotation Secrets Provider uses)
-apiVersion: admissionregistration.k8s.io/v1beta1
+apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingAdmissionPolicy
 metadata:
   name: secrets-manager-authenticator
@@ -116,6 +120,13 @@ spec:
     - name: conjurVersion
       expression: >-
         variables.config[?'CONJUR_VERSION'].orValue(variables.config[?'conjurVersion'].orValue('5'))
+    - name: useJwt
+      expression: >-
+        variables.connConfigMap == '' && variables.conjurAuthnUrl.contains('/authn-jwt/')
+    - name: jwtAudience
+      expression: variables.config[?'jwtAudience'].orValue('conjur')
+    - name: jwtTokenExpirationSeconds
+      expression: int(variables.config[?'jwtTokenExpirationSeconds'].orValue('600'))
     - name: existingVolumeNames
       expression: >-
         has(object.spec.volumes) ? object.spec.volumes.map(v, v.name) : []
@@ -146,12 +157,29 @@ spec:
             JSONPatch{
               op: "add",
               path: "/spec/volumes",
-              value: (has(object.spec.volumes) ? object.spec.volumes : []) + [
-                Object.spec.volumes{
-                  name: "conjur-access-token",
-                  emptyDir: Object.spec.volumes.emptyDir{medium: "Memory"}
-                }
-              ].filter(v, !(v.name in variables.existingVolumeNames))
+              value: (has(object.spec.volumes) ? object.spec.volumes : []) + (
+                [
+                  Object.spec.volumes{
+                    name: "conjur-access-token",
+                    emptyDir: Object.spec.volumes.emptyDir{medium: "Memory"}
+                  }
+                ] + (variables.useJwt ? [
+                  Object.spec.volumes{
+                    name: "jwt-token",
+                    projected: Object.spec.volumes.projected{
+                      sources: [
+                        Object.spec.volumes.projected.sources{
+                          serviceAccountToken: Object.spec.volumes.projected.sources.serviceAccountToken{
+                            path: "jwt",
+                            audience: variables.jwtAudience,
+                            expirationSeconds: variables.jwtTokenExpirationSeconds
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ] : [])
+              ).filter(v, !(v.name in variables.existingVolumeNames))
             },
             JSONPatch{
               op: "add",
@@ -246,10 +274,14 @@ spec:
                         fieldRef: Object.spec.initContainers.env.valueFrom.fieldRef{fieldPath: "metadata.namespace"}
                       }
                     }
-                  ],
+                  ] + (variables.useJwt ? [
+                    Object.spec.initContainers.env{name: "JWT_TOKEN_PATH", value: "/var/run/secrets/tokens/jwt"}
+                  ] : []),
                   volumeMounts: [
                     Object.spec.initContainers.volumeMounts{name: "conjur-access-token", mountPath: "/run/conjur"}
-                  ],
+                  ] + (variables.useJwt ? [
+                    Object.spec.initContainers.volumeMounts{name: "jwt-token", mountPath: "/var/run/secrets/tokens", readOnly: true}
+                  ] : []),
                   securityContext: Object.spec.initContainers.securityContext{
                     allowPrivilegeEscalation: false,
                     capabilities: Object.spec.initContainers.securityContext.capabilities{drop: ["ALL"]},
@@ -280,7 +312,7 @@ spec:
             JSONPatch{op: "remove", path: "/metadata/annotations/" + jsonpatch.escapeKey(k)}
           )
 ---
-apiVersion: admissionregistration.k8s.io/v1beta1
+apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingAdmissionPolicyBinding
 metadata:
   name: secrets-manager-authenticator
@@ -291,7 +323,11 @@ spec:
   paramRef:
     name: secrets-manager-sidecar-config
     namespace: secrets-manager
-    parameterNotFoundAction: Deny
+    # Allow, not Deny: params are resolved before matchConditions, so Deny
+    # would block every pod in labelled namespaces if the ConfigMap went
+    # missing. Pods that request injection are still rejected by the
+    # secrets-manager-sidecar-injection ValidatingAdmissionPolicy.
+    parameterNotFoundAction: Allow
   matchResources:
     namespaceSelector:
       matchLabels:

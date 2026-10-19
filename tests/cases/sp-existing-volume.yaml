@@ -1,0 +1,23 @@
+# Pod already defines conjur-status and mounts it: reused, not duplicated
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sp-existing-volume
+  annotations:
+    conjur.org/inject: "true"
+    conjur.org/inject-type: secrets-provider
+    conjur.org/conjur-inject-volumes: app, sidecar-two
+    conjur.org/authn-identity: host/data/{{DATA_BRANCH}}/system:serviceaccount:{{APP_NS}}:demo-app
+spec:
+  serviceAccountName: demo-app
+  volumes:
+    - name: conjur-status
+      emptyDir: {}
+  containers:
+    - name: app
+      image: busybox:1.36
+      volumeMounts:
+        - name: conjur-status
+          mountPath: /conjur/status
+    - name: sidecar-two
+      image: busybox:1.36

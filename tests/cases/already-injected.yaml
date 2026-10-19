@@ -1,0 +1,13 @@
+# Already carries conjur.org/status=injected: not mutated again, not denied
+apiVersion: v1
+kind: Pod
+metadata:
+  name: already-injected
+  annotations:
+    conjur.org/inject: "true"
+    conjur.org/inject-type: secrets-provider
+    conjur.org/status: injected
+spec:
+  containers:
+    - name: app
+      image: busybox:1.36

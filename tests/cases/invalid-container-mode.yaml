@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: invalid-container-mode
+  annotations:
+    conjur.org/inject: "true"
+    conjur.org/inject-type: secrets-provider
+    conjur.org/container-mode: bogus
+spec:
+  containers:
+    - name: app
+      image: busybox:1.36

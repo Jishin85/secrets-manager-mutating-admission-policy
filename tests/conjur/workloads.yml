@@ -1,0 +1,30 @@
+# Loaded at branch: data
+# One host per test service account; each is bound to its JWT `sub` claim.
+- !policy
+  id: {{DATA_BRANCH}}
+  body:
+    - &hosts
+      - !host
+        id: system:serviceaccount:{{APP_NS}}:demo-app
+        annotations:
+          authn-jwt/{{AUTHN_ID}}/sub: system:serviceaccount:{{APP_NS}}:demo-app
+      - !host
+        id: system:serviceaccount:{{APP_NS}}:k8s-secrets-app
+        annotations:
+          authn-jwt/{{AUTHN_ID}}/sub: system:serviceaccount:{{APP_NS}}:k8s-secrets-app
+      - !host
+        id: system:serviceaccount:{{APP_NS}}:token-consumer
+        annotations:
+          authn-jwt/{{AUTHN_ID}}/sub: system:serviceaccount:{{APP_NS}}:token-consumer
+    - &variables
+      - !variable db/url
+      - !variable db/username
+      - !variable db/password
+    - !group consumers
+    - !grant
+      role: !group consumers
+      members: *hosts
+    - !permit
+      role: !group consumers
+      privileges: [ read, execute ]
+      resources: *variables

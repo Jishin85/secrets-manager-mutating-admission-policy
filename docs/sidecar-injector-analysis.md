@@ -57,7 +57,8 @@ Functional (from reading the code):
 - **k8s_secrets mode builds an invalid pod.** The `conjur-secrets` volume is
   only created in `file` mode, but `conjur-secrets` mounts are added to
   receiver containers in every mode.
-- **Injected containers don't get the service account token.** The built-in
+- **Injected containers don't get the service account token** (confirmed in
+  testing: the token was missing from the injected container). The built-in
   ServiceAccount admission plugin runs before webhooks, so it never sees the
   injected container. Only the Secretless path works around this. Secrets
   Provider in `k8s_secrets` mode needs API access.

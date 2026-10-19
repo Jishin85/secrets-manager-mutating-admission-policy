@@ -1,0 +1,17 @@
+# Loaded at branch: conjur/authn-jwt
+# Dedicated authn-jwt authenticator for the test cluster. The cluster's JWKS
+# endpoint is not reachable from SaaS, so keys are provided statically through
+# `public-keys`. No token-app-property: workloads send their host id.
+- !policy
+  id: {{AUTHN_ID}}
+  body:
+    - !webservice
+    - !webservice status
+    - !variable public-keys
+    - !variable issuer
+    - !variable audience
+    - !group apps
+    - !permit
+      role: !group apps
+      privilege: [ read, authenticate ]
+      resource: !webservice

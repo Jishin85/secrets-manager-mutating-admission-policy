@@ -1,0 +1,26 @@
+# Authenticator client as a native sidecar sharing an access token.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: token-consumer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: token-consumer
+  template:
+    metadata:
+      labels:
+        app: token-consumer
+      annotations:
+        conjur.org/inject: "true"
+        conjur.org/inject-type: authenticator
+        conjur.org/container-mode: sidecar
+        conjur.org/authn-identity: host/data/{{DATA_BRANCH}}/system:serviceaccount:{{APP_NS}}:token-consumer
+        conjur.org/conjur-inject-volumes: app
+    spec:
+      serviceAccountName: token-consumer
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sh", "-c", "exec sleep 86400"]

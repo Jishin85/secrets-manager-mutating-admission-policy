@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: authn-no-identity
+  annotations:
+    conjur.org/inject: "true"
+    conjur.org/inject-type: authenticator
+spec:
+  containers:
+    - name: app
+      image: busybox:1.36

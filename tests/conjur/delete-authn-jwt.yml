@@ -1,0 +1,15 @@
+# Applied with `policy update` at branch: conjur/authn-jwt
+- !delete
+  record: !variable {{AUTHN_ID}}/public-keys
+- !delete
+  record: !variable {{AUTHN_ID}}/issuer
+- !delete
+  record: !variable {{AUTHN_ID}}/audience
+- !delete
+  record: !group {{AUTHN_ID}}/apps
+- !delete
+  record: !webservice {{AUTHN_ID}}/status
+- !delete
+  record: !webservice {{AUTHN_ID}}
+- !delete
+  record: !policy {{AUTHN_ID}}

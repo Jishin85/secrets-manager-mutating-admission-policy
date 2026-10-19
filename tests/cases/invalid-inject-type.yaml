@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: invalid-inject-type
+  annotations:
+    conjur.org/inject: "true"
+    conjur.org/inject-type: foo
+spec:
+  containers:
+    - name: app
+      image: busybox:1.36

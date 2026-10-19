@@ -1,0 +1,17 @@
+# Applied with `policy update` at branch: data
+- !delete
+  record: !host {{DATA_BRANCH}}/system:serviceaccount:{{APP_NS}}:demo-app
+- !delete
+  record: !host {{DATA_BRANCH}}/system:serviceaccount:{{APP_NS}}:k8s-secrets-app
+- !delete
+  record: !host {{DATA_BRANCH}}/system:serviceaccount:{{APP_NS}}:token-consumer
+- !delete
+  record: !variable {{DATA_BRANCH}}/db/url
+- !delete
+  record: !variable {{DATA_BRANCH}}/db/username
+- !delete
+  record: !variable {{DATA_BRANCH}}/db/password
+- !delete
+  record: !group {{DATA_BRANCH}}/consumers
+- !delete
+  record: !policy {{DATA_BRANCH}}

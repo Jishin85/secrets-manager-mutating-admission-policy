@@ -1,0 +1,12 @@
+# conjur.org/inject is "false": left untouched
+apiVersion: v1
+kind: Pod
+metadata:
+  name: not-requested
+  annotations:
+    conjur.org/inject: "false"
+    conjur.org/inject-type: secrets-provider
+spec:
+  containers:
+    - name: app
+      image: busybox:1.36
