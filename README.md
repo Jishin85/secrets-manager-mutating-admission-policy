@@ -14,18 +14,18 @@ existing workloads can move over without manifest changes.
 
 > [!IMPORTANT]
 > **Disclaimer: community effort, not an official repository.**
-> This project is not developed, endorsed, or supported by Palo Alto Networks
-> or CyberArk. It is not a product, and its contents are not an official
-> recommendation or roadmap. It is provided "as is", without warranty of any
-> kind. Palo Alto Networks and CyberArk support does not cover it; raise
-> questions as issues in this repository.
+> This project is not developed, endorsed, or supported by Palo Alto Networks.
+> It is not a product, and its contents are not an official recommendation or
+> roadmap. It is provided "as is", without warranty of any kind. Palo Alto
+> Networks support does not cover it; raise questions as issues in this
+> repository.
 >
 > Validate it in your own environment before relying on it. For supported
 > deployment options, see the official Secrets Manager documentation.
 >
 > Palo Alto Networks, Idira, CyberArk, Conjur and related names are
-> trademarks of their respective owners. They are used here only to identify
-> the products this project works with.
+> trademarks of Palo Alto Networks or its affiliates. They are used here only
+> to identify the products this project works with.
 
 **Status:** tested on Kubernetes 1.36 against Secrets Manager SaaS.
 - Secrets Provider (push-to-file and `k8s_secrets`) and the authenticator
