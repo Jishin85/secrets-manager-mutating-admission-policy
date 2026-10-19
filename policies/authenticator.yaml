@@ -1,7 +1,7 @@
 # Secrets Manager — Kubernetes Authenticator client (conjur-authn-k8s-client)
 # sidecar injection.
 #
-# Replaces the `conjur.org/inject-type: authenticator` path of the
+# Community alternative to the `conjur.org/inject-type: authenticator` path of the
 # cyberark/sidecar-injector webhook (pkg/inject/authenticator.go).
 #
 # Injected into the pod:

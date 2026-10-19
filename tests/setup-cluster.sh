@@ -4,7 +4,7 @@
 source "$(dirname "$0")/lib.sh"
 
 # Pinned by digest: Secrets Provider v1.11.1, authn-k8s-client v0.27.0
-# (amd64-only images; OrbStack runs them under Rosetta).
+# (amd64-only images at the time of testing; other node architectures need emulation).
 SECRETS_PROVIDER_IMAGE="${SECRETS_PROVIDER_IMAGE:-cyberark/secrets-provider-for-k8s@sha256:7fd400223ca22b192016771ebb58395faa8b7f4e40780c3ef1259af7b8eb92d6}"
 AUTHENTICATOR_IMAGE="${AUTHENTICATOR_IMAGE:-cyberark/conjur-authn-k8s-client@sha256:948966533bb43c75bdc46aacf1541f764bd83d91e119b68af1c944256c32a3f4}"
 

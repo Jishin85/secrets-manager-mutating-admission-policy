@@ -1,0 +1,15 @@
+Secrets Manager Sidecar Injection: MutatingAdmissionPolicy
+Copyright 2026 The secrets-manager-mutating-admission-policy contributors
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This is a community project. It is not developed, endorsed, or supported by
+Palo Alto Networks or CyberArk.
+
+The pod annotation contract and the injection behaviour reproduced here are
+based on cyberark/sidecar-injector (https://github.com/cyberark/sidecar-injector),
+Copyright (c) 2020 CyberArk Software Ltd., licensed under the Apache License,
+Version 2.0.
+
+Palo Alto Networks, Idira, CyberArk, Conjur and related names are trademarks of
+their respective owners.
