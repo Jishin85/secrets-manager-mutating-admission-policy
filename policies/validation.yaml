@@ -1,0 +1,103 @@
+# Secrets Manager — sidecar injection guard rail.
+#
+# MutatingAdmissionPolicies cannot reject requests. The webhook used to fail
+# pods with an error for invalid annotations; this ValidatingAdmissionPolicy
+# restores that behaviour and additionally fails closed when injection was
+# requested but no mutating policy ran (missing binding, missing parameter
+# ConfigMap, MutatingAdmissionPolicy feature disabled, ...).
+#
+# Validation runs after all mutations. A successfully injected pod carries
+# `conjur.org/status: injected` and no longer has `conjur.org/inject`, so it
+# never matches. Anything that still requests injection was skipped by the
+# mutating policies, and the first failing rule below explains why.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: secrets-manager-sidecar-injection
+  labels:
+    app.kubernetes.io/part-of: secrets-manager-sidecars
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values: ["kube-system", "kube-public"]
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE"]
+        resources: ["pods"]
+  matchConditions:
+    - name: injection-requested
+      expression: >-
+        has(object.metadata.annotations) &&
+        object.metadata.annotations[?'conjur.org/inject'].orValue('').lowerAscii() in ['y', 'yes', 'true', 'on']
+    - name: not-injected
+      expression: >-
+        object.metadata.annotations[?'conjur.org/status'].orValue('').lowerAscii() != 'injected'
+  variables:
+    - name: annotations
+      expression: object.metadata.annotations
+    - name: injectType
+      expression: variables.annotations[?'conjur.org/inject-type'].orValue('')
+    - name: containerMode
+      expression: variables.annotations[?'conjur.org/container-mode'].orValue('')
+  validations:
+    - expression: >-
+        variables.injectType in ['secrets-provider', 'authenticator', 'secretless']
+      messageExpression: >-
+        'Secrets Manager sidecar injection failed: invalid conjur.org/inject-type "' + variables.injectType +
+        '" (expected secrets-provider, authenticator or secretless)'
+      reason: Invalid
+    - expression: >-
+        variables.injectType == 'secretless' || variables.containerMode in ['', 'init', 'sidecar']
+      messageExpression: >-
+        'Secrets Manager sidecar injection failed: conjur.org/container-mode value "' + variables.containerMode +
+        '" not supported (expected init or sidecar)'
+      reason: Invalid
+    - expression: >-
+        variables.injectType != 'secrets-provider' ||
+        variables.annotations[?'conjur.org/secrets-destination'].orValue('') in ['', 'file', 'k8s_secrets']
+      messageExpression: >-
+        'Secrets Manager sidecar injection failed: conjur.org/secrets-destination value "' +
+        variables.annotations[?'conjur.org/secrets-destination'].orValue('') +
+        '" not supported (expected file or k8s_secrets)'
+      reason: Invalid
+    - expression: >-
+        variables.injectType != 'authenticator' ||
+        variables.annotations[?'conjur.org/conjurAuthConfig'].orValue('') != '' ||
+        variables.annotations[?'conjur.org/authn-identity'].orValue('') != ''
+      message: >-
+        Secrets Manager sidecar injection failed: the authenticator requires either
+        conjur.org/conjurAuthConfig or conjur.org/authn-identity
+      reason: Invalid
+    - expression: >-
+        variables.injectType != 'secretless' ||
+        variables.annotations[?'conjur.org/secretless-config'].orValue('') != ''
+      message: >-
+        Secrets Manager sidecar injection failed: missing annotation conjur.org/secretless-config
+      reason: Invalid
+    # Catch-all: configuration is valid but nothing mutated the pod.
+    - expression: "false"
+      message: >-
+        Secrets Manager sidecar injection was requested but not performed. Check that the
+        secrets-manager-* MutatingAdmissionPolicyBindings exist, that the parameter ConfigMap
+        secrets-manager/secrets-manager-sidecar-config exists, and that the
+        MutatingAdmissionPolicy API is enabled on the API server.
+      reason: Invalid
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: secrets-manager-sidecar-injection
+  labels:
+    app.kubernetes.io/part-of: secrets-manager-sidecars
+spec:
+  policyName: secrets-manager-sidecar-injection
+  validationActions: ["Deny"]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        cyberark-sidecar-injector: enabled

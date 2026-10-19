@@ -1,0 +1,51 @@
+# Cluster-wide parameters for the Secrets Manager sidecar policies.
+#
+# This ConfigMap replaces two things from the cyberark/sidecar-injector webhook:
+#   1. The injector's `-secrets-provider-image`, `-authenticator-image` and
+#      `-secretless-image` CLI flags.
+#   2. The "Golden ConfigMap" the injector Deployment loaded via `envFrom`
+#      (conjurAccount, conjurApplianceUrl, authnK8sAuthenticatorID, ...).
+#
+# Key names intentionally match the Golden ConfigMap produced by the
+# conjur-config-cluster-prep Helm chart, so you can point the policy bindings
+# at an existing Golden ConfigMap instead of this one. As with the webhook,
+# the upper-case CONJUR_* form of a key takes precedence over the camelCase
+# form when both are present.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: secrets-manager
+  labels:
+    app.kubernetes.io/part-of: secrets-manager-sidecars
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: secrets-manager-sidecar-config
+  namespace: secrets-manager
+  labels:
+    app.kubernetes.io/part-of: secrets-manager-sidecars
+data:
+  # --- Sidecar images -------------------------------------------------------
+  # Pin these to a tested version (or better, a digest) before production use.
+  # Pods may still override per-workload with `conjur.org/container-image`.
+  secretsProviderImage: "cyberark/secrets-provider-for-k8s:latest"
+  authenticatorImage: "cyberark/conjur-authn-k8s-client:latest"
+  secretlessImage: "cyberark/secretless-broker:latest"
+  # The webhook hard-coded `Always`. With pinned tags `IfNotPresent` is the
+  # recommended default.
+  imagePullPolicy: "IfNotPresent"
+
+  # --- Secrets Manager connection (Golden ConfigMap keys) -------------------
+  conjurAccount: "myConjurAccount"
+  conjurApplianceUrl: "https://secrets-manager-follower.secrets-manager.svc.cluster.local"
+  authnK8sAuthenticatorID: "my-authenticator-id"
+  # Optional. Defaults to "<conjurApplianceUrl>/authn-k8s/<authnK8sAuthenticatorID>".
+  # CONJUR_AUTHN_URL: "https://.../authn-jwt/my-service-id"
+  conjurSslCertificate: |
+    -----BEGIN CERTIFICATE-----
+    REPLACE-WITH-SECRETS-MANAGER-CA-CERTIFICATE
+    -----END CERTIFICATE-----
+  # Only used by the authenticator / secretless fallbacks when a pod does not
+  # reference a `conjur.org/conjurConnConfig` ConfigMap.
+  conjurVersion: "5"
